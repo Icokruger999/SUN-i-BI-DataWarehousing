@@ -26,7 +26,7 @@
 | `com.OUHierarchy` | OUID, ParentOUID, ChildOUID, DepthLevel | OrgUnit rollup (Faculty → Dept) |
 | `mds.EnrolmentTargets` | TargetID, ProgrammeID, OUID (→OrgUnit), AcadYear, TargetEnrolments | Fact table — targets per faculty, repopulated after OrgUnit fix |
 
-**Join path:** `com.OrgUnit OUID → mds.EnrolmentTargets OUID` and `com.OrgUnit OUID → com.OUHierarchy ChildOUID`
+**Join path:** `com.OrgUnit.OUID = mds.EnrolmentTargets.OUID` and `com.OrgUnit.OUID = com.OUHierarchy.ChildOUID`
 
 ---
 
@@ -50,7 +50,7 @@
 | `sis.ProgramEnrolments` | EnrolmentID, PersonID, ProgrammeID, AcadYear, StudyYear | Contains ProgrammeYear — one row per student per programme per year |
 | `sis.ModeOfInstruction` | ModeOfInstructionID, ModeDesc | Semester=99 maps here |
 
-**Join path:** `sis.Programme ProgrammeID → sis.ProgramEnrolments ProgrammeID` — cross-reference CerType/ProgrammeCode with ProgrammeYear
+**Join path:** `sis.Programme.ProgrammeID = sis.ProgramEnrolments.ProgrammeID` — cross-reference CerType/ProgrammeCode with ProgrammeYear
 
 ---
 
@@ -142,7 +142,7 @@
 | `acc.Hostel` | HostelID, HostelCode, HostelName, OUID | Residence info — subquery target in proc_HealthOne |
 | `dbo.HealthOne` | PersonID, USNumber, AcadYear, ProgrammeID, StudyYear, FacultyDescr | Destination — denormalised student view |
 
-**Join path:** `com.Person USNumber → ... → acc.Hostel HostelID` via `sis.ProgramEnrolments`. The bug: query tried `b.[StudentID]` but `com.Person` has no `StudentID` column — only `USNumber`.
+**Join path:** `com.Person.USNumber = sis.ProgramEnrolments.[USNumber]` → `sis.ProgramEnrolments.HostelID = acc.Hostel.HostelID`. The bug: query tried `b.[StudentID]` but `com.Person` has no `StudentID` column — only `USNumber`.
 
 ---
 
@@ -165,7 +165,7 @@
 | `com.Person` | PersonID, USNumber, DateOfBirth | DOB source — Age=0 likely caused by NULL or bad DOB here |
 | `sis.ProgramEnrolments` | EnrolmentID, PersonID, AcadYear | Enrolment context — `sis.S_ProgIntakePerEnrolment_SS` is a SunStudent variant of this |
 
-**Join path:** `sis.S_ProgIntakePerEnrolment_SS StudentID → com.Person PersonID/USNumber` to cross-reference DOB with Age at intake
+**Join path:** `sis.S_ProgIntakePerEnrolment_SS.StudentID = com.Person.PersonID` (or USNumber) to cross-reference DOB with Age at intake
 
 ---
 
@@ -187,7 +187,7 @@
 |-------|-------------|------|
 | `sis.Module` | ModuleID, ModuleCode, ModuleName, Credits | Core module table — `sis.S_Module_LEG` is the legacy variant. NQFLevel should match source |
 
-**Join path:** `sis.S_Module_LEG ModuleCode → sis.Module ModuleCode` to compare NQFLevel across legacy vs current
+**Join path:** `sis.S_Module_LEG.ModuleCode = sis.Module.ModuleCode` to compare NQFLevel across legacy vs current
 
 ---
 
@@ -210,7 +210,7 @@
 | `sis.Module` | ModuleID, ModuleCode, ModuleName | Module context for the affected marks |
 | `sis.ModuleEnrolment` | ModuleEnrolmentID, PersonID, ModuleID, ExamMark, CMark | Current enrolment marks — `sis.ModVariantEnrolment_LEG` is a variant with ClassMark/FinalMark/ProgressMark |
 
-**Join path:** `sis.ModVariantEnrolment_LEG ModuleID → sis.Module ModuleID` and potentially `StudentID → com.Person PersonID` to identify affected students
+**Join path:** `sis.ModVariantEnrolment_LEG.ModuleID = sis.Module.ModuleID` and potentially `StudentID = com.Person.PersonID` to identify affected students
 
 ---
 
@@ -236,7 +236,7 @@
 | `com.Gender` | GenderID, GenderDesc | Reference — joins to Person.GenderID |
 | `sis.ProgramEnrolments` | EnrolmentID, PersonID, AcadYear | Downstream consumer — bad DOBs flow here via Person join |
 
-**Join path:** `com.S_Person/S_Person_Bio PersonID → com.Person PersonID` — the DOB column flows into `com.Person.DateOfBirth`, which then feeds every downstream Age calculation in ProgramEnrolments, ModuleEnrolment, etc.
+**Join path:** `com.S_Person.PersonID = com.Person.PersonID` (same for `S_Person_Bio`) — the DOB column flows into `com.Person.DateOfBirth`, which then feeds every downstream Age calculation in ProgramEnrolments, ModuleEnrolment, etc.
 
 ---
 
