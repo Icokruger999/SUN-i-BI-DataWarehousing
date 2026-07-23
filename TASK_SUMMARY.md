@@ -19,6 +19,15 @@
 3. Add monitoring check: row-count alert on OrgUnit in DEV compared to PROD baseline
 4. If stable for 3 consecutive runs, close
 
+**Schema Map (ERD):**
+| Table | Key Columns | Role |
+|-------|-------------|------|
+| `com.OrgUnit` | OUID, OUCode, OUName, OUType, FacultyCode | Core dimension — faculty resolution failed because only 2 rows existed |
+| `com.OUHierarchy` | OUID, ParentOUID, ChildOUID, DepthLevel | OrgUnit rollup (Faculty → Dept) |
+| `mds.EnrolmentTargets` | TargetID, ProgrammeID, OUID (→OrgUnit), AcadYear, TargetEnrolments | Fact table — targets per faculty, repopulated after OrgUnit fix |
+
+**Join path:** `com.OrgUnit OUID → mds.EnrolmentTargets OUID` and `com.OrgUnit OUID → com.OUHierarchy ChildOUID`
+
 ---
 
 ### SUNIKAN-1263 — Confirm ProgrammeYear >7 legitimacy
@@ -33,6 +42,15 @@
 2. If confirmed, update CHECK constraint to allow (ProgrammeYear <= 20 OR ProgrammeYear = 50)
 3. Document sentinel 50 + Semester 99 convention in metadata/reference doc
 4. If disputed, follow up with business owner for correction or alternative handling
+
+**Schema Map (ERD):**
+| Table | Key Columns | Role |
+|-------|-------------|------|
+| `sis.Programme` | ProgrammeID, ProgrammeCode, ProgrammeName, ProgrammeLevel, CerType | Programme metadata — _E1xx/_A10x codes live here |
+| `sis.ProgramEnrolments` | EnrolmentID, PersonID, ProgrammeID, AcadYear, StudyYear | Contains ProgrammeYear — one row per student per programme per year |
+| `sis.ModeOfInstruction` | ModeOfInstructionID, ModeDesc | Semester=99 maps here |
+
+**Join path:** `sis.Programme ProgrammeID → sis.ProgramEnrolments ProgrammeID` — cross-reference CerType/ProgrammeCode with ProgrammeYear
 
 ---
 
@@ -58,6 +76,15 @@
 6. Confirm with Ernst that data looks correct
 7. Check into source control (sunidatabases project)
 
+**Schema Map (ERD):**
+| Table | Key Columns | Role |
+|-------|-------------|------|
+| `com.Person` | PersonID, USNumber | Expected join target for student-related sunshine data |
+| `sis.Programme` | ProgrammeID, ProgrammeCode | Expected join target for programme-related sunshine data |
+| `sis.Module` | ModuleID, ModuleCode | Expected join target for grade/credit details |
+
+> **Note:** sunshine schema is not yet in ODS. Once ingested into SS_Bronze, these tables will likely join to com.Person (USNumber), sis.Programme (ProgrammeCode), or sis.Module (ModuleCode). Profile source keys during step 1.
+
 ---
 
 ### SUNIKAN-1264 — Always-NULL columns: drop or populate?
@@ -82,6 +109,14 @@
 5. Document decision per column on ticket
 6. Deploy DDL/ETL changes, check in to source control
 
+**Schema Map (ERD):**
+| Table | Key Columns | ERD Parent |
+|-------|-------------|------------|
+| `sis.S_ProgrammeIntake` | ProgrammeID, IntakeYear | Feeds into `sis.ProgramEnrolments` — AlignedInd/EDPSubInd may come from `sis.Programme` |
+| `sis.S_Module_LEG` | ModuleID, ModuleCode | Legacy variant of `sis.Module` — PracticalModule/SubsidyInd may exist in source |
+| `sis.S_ProgIntakePerEnrolment_SS` | EnrolmentID, StudentID | SunStudent variant of `sis.ProgramEnrolments` — RegisteredForExam etc. |
+| `rcs.S_ResearchBudget` | BudgetID, ResearcherID | Not in current ODS schema — `rcs` schema is separate from core SIS |
+
 ---
 
 ### SUNIKAN-1257 — proc_HealthOne: remove leftover StudentID predicate
@@ -98,9 +133,18 @@
 6. Verify "SUNi ETL - 12 HealthOne" job runs successfully end to end
 7. Check in to source control
 
----
+**Schema Map (ERD):**
+| Table | Key Columns | Role |
+|-------|-------------|------|
+| `com.Person` | PersonID, USNumber | Central person — `b` alias in query. Has `USNumber` but no `StudentID` |
+| `sis.ProgramEnrolments` | EnrolmentID, PersonID, ProgrammeID, HostelID, AcadYear | Enrolment data — `PRE` alias. Joined via `USNumber` |
+| `sis.Programme` | ProgrammeID, ProgrammeCode, ProgrammeName | Programme context for HealthOne denormalisation |
+| `acc.Hostel` | HostelID, HostelCode, HostelName, OUID | Residence info — subquery target in proc_HealthOne |
+| `dbo.HealthOne` | PersonID, USNumber, AcadYear, ProgrammeID, StudyYear, FacultyDescr | Destination — denormalised student view |
 
-## Data Quality Bugs (v2026.07)
+**Join path:** `com.Person USNumber → ... → acc.Hostel HostelID` via `sis.ProgramEnrolments`. The bug: query tried `b.[StudentID]` but `com.Person` has no `StudentID` column — only `USNumber`.
+
+---
 
 ### SUNIKAN-1262 — Age=0 on 2 rows
 **Type:** Bug | **Priority:** P4 | **Est.:** ~2h
@@ -114,6 +158,14 @@
 4. If ETL calculation issue: fix Age derivation logic
 5. Add CHECK constraint or ETL validation to prevent recurrence
 6. Document root cause on ticket
+
+**Schema Map (ERD):**
+| Table | Key Columns | Role |
+|-------|-------------|------|
+| `com.Person` | PersonID, USNumber, DateOfBirth | DOB source — Age=0 likely caused by NULL or bad DOB here |
+| `sis.ProgramEnrolments` | EnrolmentID, PersonID, AcadYear | Enrolment context — `sis.S_ProgIntakePerEnrolment_SS` is a SunStudent variant of this |
+
+**Join path:** `sis.S_ProgIntakePerEnrolment_SS StudentID → com.Person PersonID/USNumber` to cross-reference DOB with Age at intake
 
 ---
 
@@ -130,6 +182,13 @@
 5. Add CHECK constraint (NQFLevel BETWEEN 1 AND 10) to prevent recurrence
 6. Document on ticket
 
+**Schema Map (ERD):**
+| Table | Key Columns | Role |
+|-------|-------------|------|
+| `sis.Module` | ModuleID, ModuleCode, ModuleName, Credits | Core module table — `sis.S_Module_LEG` is the legacy variant. NQFLevel should match source |
+
+**Join path:** `sis.S_Module_LEG ModuleCode → sis.Module ModuleCode` to compare NQFLevel across legacy vs current
+
 ---
 
 ### SUNIKAN-1260 — Negative marks in ModVariantEnrolment_LEG
@@ -144,6 +203,14 @@
 4. If ETL sign reversal: fix transformation
 5. Add CHECK constraints (ClassMark >= 0, FinalMark >= 0, ProgressMark >= 0) or ETL validation
 6. Document on ticket
+
+**Schema Map (ERD):**
+| Table | Key Columns | Role |
+|-------|-------------|------|
+| `sis.Module` | ModuleID, ModuleCode, ModuleName | Module context for the affected marks |
+| `sis.ModuleEnrolment` | ModuleEnrolmentID, PersonID, ModuleID, ExamMark, CMark | Current enrolment marks — `sis.ModVariantEnrolment_LEG` is a variant with ClassMark/FinalMark/ProgressMark |
+
+**Join path:** `sis.ModVariantEnrolment_LEG ModuleID → sis.Module ModuleID` and potentially `StudentID → com.Person PersonID` to identify affected students
 
 ---
 
@@ -160,6 +227,16 @@
 5. Consider adding CHECK constraint with same logic in IDS to prevent future bad data loading
 6. Document findings and plan on ticket
 7. Any downstream Age calculations must handle NULL/fallback for these rows until corrected
+
+**Schema Map (ERD):**
+| Table | Key Columns | Role |
+|-------|-------------|------|
+| `com.Person` | PersonID, USNumber, DateOfBirth | Central person — `com.S_Person` and `com.S_Person_Bio` are staging variants feeding this |
+| `com.Race` | RaceID, RaceDesc | Reference — joins to Person.RaceID for demographics |
+| `com.Gender` | GenderID, GenderDesc | Reference — joins to Person.GenderID |
+| `sis.ProgramEnrolments` | EnrolmentID, PersonID, AcadYear | Downstream consumer — bad DOBs flow here via Person join |
+
+**Join path:** `com.S_Person/S_Person_Bio PersonID → com.Person PersonID` — the DOB column flows into `com.Person.DateOfBirth`, which then feeds every downstream Age calculation in ProgramEnrolments, ModuleEnrolment, etc.
 
 ---
 
@@ -185,3 +262,4 @@
 - **CHECK constraints as safety net:** Add DB-level constraints after cleaning data to prevent regression.
 - **Environment parity:** When resolving DEV-specific drift (like 1267), add monitoring to detect recurrence early.
 - **Source control discipline:** Every deployed change checked into the sunidatabases project.
+- **ERD as query roadmap:** Before investigating any data issue, trace the join path from the schema map to understand which tables feed the affected column.
