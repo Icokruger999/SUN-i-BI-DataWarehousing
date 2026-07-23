@@ -300,7 +300,7 @@ erDiagram
     com_Person ||--o{ sco_ShortCourseEnrollment : enrolls
     com_Person ||--o{ hem_114STUD : appears_in
     com_Person ||--o{ dbo_HealthOne : drives
-    com_Person ||--o|{ apl_StudentApplication : applies
+    com_Person ||--o{ apl_StudentApplication : applies
 
     com_Person }|--|| com_Gender : has_gender
     com_Person }|--|| com_Race : has_race
