@@ -27,6 +27,9 @@ ALTER PROC [rpt].[proc_HealthOne]
 	2021/04/08	IP Williams(iOCO)		Created
 	2024/02/18	IP Williams(ND)			Adhoc - Updated to include IDS sourced data
 	2024/06/07	IP Williams(ND)			Adhoc - Add TRY_CAST(b.[USNumber] AS INT) to exclude missing invalid [USNumber]
+	2026/06/08	IP Williams(ND)			Adhoc - Extended IDS/DWH UNION branch to resolve 8 previously NULL fields
+											(Campus, Hostel, HistoricalYear, EmailAddress, CellNr, PostalAddress,
+											HomeAddress, Faculty) via additional joins to DWH, IDS and STAGING
 	2026/07/26	ICO Kruger				SUNIKAN-1253 - Repointed Hostel subquery from S_ProgIntakePerEnrolment_HIST_SS
 										to IDS.sis.S_ProgIntakePerEnrolment_LEG
 	2026/07/26	ICO Kruger				SUNIKAN-1257 - Removed leftover AND PRE.[StudentID] = b.[StudentID] predicate
